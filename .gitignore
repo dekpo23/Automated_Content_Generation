@@ -1,1 +1,18 @@
-.env.local
+# OS
+.DS_Store
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+.env*
+!.env.example
+
+# Backend
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/chroma_db/

@@ -29,7 +29,7 @@ export default function DashboardPage() {
     // Modal state
     const [selectedDraft, setSelectedDraft] = useState<DraftRecord | null>(null);
     const [editedBody, setEditedBody] = useState("");
-    const [isApproving, setIsApproving] = useState(false);
+    const [isPublishing, setIsPublishing] = useState(false);
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     // Debounce search input
@@ -91,23 +91,38 @@ export default function DashboardPage() {
 
     const handleApprove = async () => {
         if (!selectedDraft) return;
-        setIsApproving(true);
+        setIsPublishing(true);
         try {
             const res = await fetch('/api/approve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ draft_id: selectedDraft.id, draft_body: editedBody, publishNow: false })
             });
-            if (!res.ok) throw new Error("Approval failed");
 
-            toast.success("Draft approved and sent to social workflow!");
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.message || data.error || `HTTP error ${res.status}`);
+            }
+
+            const data = await res.json();
+            if (data && data.success === false) {
+                throw new Error(data.message || "n8n workflow returned failure.");
+            }
+
+            toast.success("Draft published successfully!");
+            // Update local UI immediately
+            setDrafts(prev => prev.map(d => d.id === selectedDraft.id ? { ...d, status: 'published' } : d));
             setSelectedDraft(null);
-            fetchDrafts();
         } catch (e: any) {
             console.error(e);
-            toast.error("Failed to approve draft.");
+            // Check for network failure / timeout (fetch throws TypeError on network failure)
+            if (e.name === 'TypeError' || e.message === 'Failed to fetch') {
+                toast.error("Request timed out, but content may still be processing.");
+            } else {
+                toast.error(`Failed to publish: ${e.message}`);
+            }
         } finally {
-            setIsApproving(false);
+            setIsPublishing(false);
         }
     };
 
@@ -117,7 +132,7 @@ export default function DashboardPage() {
     };
 
     const closeModal = () => {
-        if (!isApproving && !isSavingEdit) {
+        if (!isPublishing && !isSavingEdit) {
             setSelectedDraft(null);
         }
     };
@@ -298,7 +313,7 @@ export default function DashboardPage() {
                     <div className="bg-white dark:bg-[#151921] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl relative">
                         <button
                             onClick={closeModal}
-                            disabled={isApproving}
+                            disabled={isPublishing}
                             className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                         >
                             <X className="w-5 h-5" />
@@ -329,14 +344,14 @@ export default function DashboardPage() {
                         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
                             <button
                                 onClick={closeModal}
-                                disabled={isApproving || isSavingEdit}
+                                disabled={isPublishing || isSavingEdit}
                                 className="px-5 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSaveEdit}
-                                disabled={isApproving || isSavingEdit}
+                                disabled={isPublishing || isSavingEdit}
                                 className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-semibold rounded-lg flex items-center justify-center min-w-[140px] transition-colors disabled:opacity-70 shadow-sm"
                             >
                                 {isSavingEdit ? (
@@ -348,13 +363,13 @@ export default function DashboardPage() {
                             </button>
                             <button
                                 onClick={handleApprove}
-                                disabled={isApproving || isSavingEdit}
+                                disabled={isPublishing || isSavingEdit}
                                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg flex items-center justify-center min-w-[200px] transition-colors disabled:opacity-70 shadow-sm"
                             >
-                                {isApproving ? (
+                                {isPublishing ? (
                                     <>
                                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Approving & Sending...
+                                        Publishing...
                                     </>
                                 ) : "Approve & Generate Socials"}
                             </button>

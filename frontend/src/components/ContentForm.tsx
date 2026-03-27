@@ -22,7 +22,7 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
     const [content, setContent] = useState("");
 
     // Phase 2.5 State additions
-    const [isLoading, setIsLoading] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [sessionId, setSessionId] = useState("");
     const [generatedDrafts, setGeneratedDrafts] = useState<DraftRecord[]>([]);
 
@@ -30,7 +30,7 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
         e.preventDefault();
         if (!content.trim()) return;
 
-        setIsLoading(true);
+        setIsGenerating(true);
         setGeneratedDrafts([]);
 
         const newSessionId = crypto.randomUUID();
@@ -54,7 +54,7 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
                 if (dedupRes.ok) {
                     const dedupData = await dedupRes.json();
                     if (dedupData.status === "rejected") {
-                        setIsLoading(false);
+                        setIsGenerating(false);
                         toast.error(`Duplicate content detected! (Distance: ${dedupData.distance?.toFixed(2) || "unknown"})`);
                         return; // Halt submission to n8n
                     }
@@ -80,43 +80,30 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
                 })
             });
 
-            if (!response.ok) throw new Error("Failed to generate drafts.");
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || errData.error || `HTTP error ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data && data.success === false) {
+                 throw new Error(data.message || "Failed to generate drafts.");
+            }
 
             setContent("");
             onDraftsGenerated(newSessionId);
+            toast.success(data.message || "Success! Your drafts are ready to review.");
 
-            // Fetch polling logic
-            const startTime = Date.now();
-            const timeout = 90000; // 90 seconds
-
-            const interval = setInterval(async () => {
-                if (Date.now() - startTime > timeout) {
-                    clearInterval(interval);
-                    setIsLoading(false);
-                    toast.error("Generation timed out. Please check the dashboard.");
-                    return;
-                }
-
-                try {
-                    const pollRes = await fetch(`/api/drafts?session_id=${newSessionId}`);
-                    if (!pollRes.ok) return;
-
-                    const drafts = await pollRes.json();
-                    if (Array.isArray(drafts) && drafts.length === 3) {
-                        clearInterval(interval);
-                        setGeneratedDrafts(drafts);
-                        setIsLoading(false);
-                        toast.success("Success! Your drafts are ready to review.");
-                    }
-                } catch (pollError) {
-                    console.error("Polling error:", pollError);
-                }
-            }, 3000);
-
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            toast.error("Failed to connect to n8n Webhook.");
-            setIsLoading(false);
+            if (error.name === 'TypeError' || error.message === 'Failed to fetch' || (error.message && error.message.includes('timeout'))) {
+                toast.error("Request timed out. The AI might still be thinking in the background, or the connection dropped.");
+            } else {
+                toast.error(error.message || "Failed to connect to n8n Webhook.");
+            }
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -178,10 +165,10 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
 
                     <button
                         type="submit"
-                        disabled={isLoading || !content.trim()}
+                        disabled={isGenerating || !content.trim()}
                         className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        {isLoading ? (
+                        {isGenerating ? (
                             <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 Generating...
@@ -199,7 +186,7 @@ export default function ContentForm({ onDraftsGenerated }: ContentFormProps) {
             {/* TASK 2: ADDITIVE UI (Strictly below form) */}
 
             {/* Polling Spinner */}
-            {isLoading && (
+            {isGenerating && (
                 <div className="flex flex-col items-center justify-center py-16 px-6 bg-white/60 dark:bg-[#151921]/60 border border-slate-200 dark:border-slate-800 rounded-xl backdrop-blur-sm animate-pulse shadow-sm min-h-[250px]">
                     <div className="relative mb-6">
                         <div className="absolute inset-0 bg-indigo-500 rounded-full blur-xl opacity-20 dark:opacity-40 animate-pulse"></div>
