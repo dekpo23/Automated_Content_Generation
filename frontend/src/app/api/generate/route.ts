@@ -9,7 +9,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Webhook URL not configured" }, { status: 500 });
         }
 
-        const response = await fetch(`${webhookUrl}/generate`, {
+        const response = await fetch(`${webhookUrl}/generate1`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
