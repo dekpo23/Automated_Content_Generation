@@ -84,8 +84,8 @@ async def process_idea(payload: ArticlePayload):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {str(e)}")
 
-    if not extracted_text or len(extracted_text) < 50 or extracted_text.startswith("http"):
-        raise HTTPException(status_code=400, detail="Extracted text is under 50 characters or just a URL.")
+    if not extracted_text or not extracted_text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
     # Step 2: Summarize FIRST (The Clean-Up)
     words = extracted_text.split()
